@@ -1,0 +1,17 @@
+si5351.c:93:6:Si5351_init	16	static
+si5351.c:134:6:Si5351_set_correction	16	static
+si5351.c:147:6:pll_reset	16	static
+si5351.c:159:10:Si5351_pllCalc	192	static
+si5351.c:231:9:Si5351_set_freq	96	static
+si5351.c:432:9:select_r_div	32	static
+si5351.c:477:10:multisynth_calc	96	static
+si5351.c:577:6:Si5351_set_pll	64	static
+si5351.c:644:6:set_ms	64	static
+si5351.c:729:6:set_int	24	static
+si5351.c:764:6:ms_div	24	static
+si5351.c:827:6:set_ms_source	24	static
+si5351.c:848:9:si5351_write_bulk	40	static
+si5351.c:874:6:Si5351_drive_strength	24	static
+si5351.c:933:6:Si5351_set_state_out	24	static
+si5351.c:964:7:si5351_write8	40	static
+si5351.c:986:7:si5351_read8	40	static

@@ -1,0 +1,8 @@
+main.c:87:24:getEncoderDir	12	static
+main.c:105:6:printRfFrequency	16	static
+main.c:142:6:showTuningStep	8	static
+main.c:188:6:isEncoderKeyPressed	0	static
+main.c:317:6:SystemClock_Config	72	static,ignoring_inline_asm
+main.c:219:5:main	96	static,ignoring_inline_asm
+main.c:464:6:Error_Handler	0	static,ignoring_inline_asm
+main.c:483:6:assert_failed	0	static
