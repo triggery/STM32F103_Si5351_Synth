@@ -37,7 +37,8 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
+#define BUTTON_WAITING_TIME	100
+#define BUTTON_IGNORE_TIME	300
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -60,6 +61,10 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define Enkoder_Key_Pin GPIO_PIN_0
 #define Enkoder_Key_GPIO_Port GPIOB
+#define Button_Left_Pin GPIO_PIN_8
+#define Button_Left_GPIO_Port GPIOA
+#define Button_Ok_Pin GPIO_PIN_9
+#define Button_Ok_GPIO_Port GPIOA
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

@@ -274,9 +274,7 @@ typedef struct {
   void Si5351_set_pll(uint64_t pll_freq, enum si5351_pll target_pll);
   uint8_t Si5351_set_freq(uint64_t freq, uint64_t pll_freq, enum si5351_clock clk);
   void Si5351_drive_strength(enum si5351_clock clk, enum si5351_drive drive);
-
-  //void Si5351_OutEnable(bool enable, unsigned char channel);
-
+  void Si5351_set_ms_source(enum si5351_clock clk, enum si5351_pll pll);
   void Si5351_set_state_out(enum si5351_clock clock_out, enum si5351_out_state out_state);
 
 #endif

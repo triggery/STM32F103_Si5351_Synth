@@ -27,6 +27,11 @@
 #include "si5351.h"
 #include "stdlib.h"
 #include "stdbool.h"
+#include "string.h"
+#include "stdio.h"
+#include "keyboard.h"
+
+#include "stm32f1xx_it.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,6 +42,10 @@
 #define STEP_BUF_SIZE	5
 uint32_t stepBuf[STEP_BUF_SIZE] = { 100, 500, 1000, 10000, 100000 };	// Hz
 uint8_t stepBufIdx = 0;
+bool flagUpdateScreen = 1;
+
+uint32_t pll_frequency = START_FREQUENCY;
+uint32_t pll2_frequency = 60000000;
 
 #define ENCODER_TIM    htim2
 
@@ -64,12 +73,16 @@ typedef enum _ENCODER_DIRECTION_TYPE {
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+
 I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
 char buff[20];
+bool convCompleted = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,6 +90,8 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_ADC1_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
@@ -86,17 +101,15 @@ static void MX_TIM2_Init(void);
 uint32_t encoderValue = 0;
 ENCODER_DIRECTION_TYPE getEncoderDir(void)
 {
-	ENCODER_DIRECTION_TYPE tmpDir = DIRECTION_NONE;
 	static uint8_t cntTick = 0;
 
 	if ( encoderValue != ENCODER_TIM.Instance->CNT && ( cntTick < 4 )) {
-		tmpDir = (encoderValue < ENCODER_TIM.Instance->CNT) ? DIRECTION_UP : DIRECTION_DOWN;
 		cntTick++;
 		encoderValue = ENCODER_TIM.Instance->CNT;
 
 		if ( cntTick == 4 ) {
 			cntTick = 0;
-			return tmpDir;
+			return ENCODER_TIM.Instance->CR1 & TIM_CR1_DIR ? DIRECTION_DOWN : DIRECTION_UP;
 		}
 	}
 	return DIRECTION_NONE;
@@ -105,7 +118,7 @@ ENCODER_DIRECTION_TYPE getEncoderDir(void)
 void printRfFrequency(uint32_t frequency) {
 
 	itoa(frequency/100, buff, 10);
-	ssd1306_SetCursor(1, 0);
+	ssd1306_SetCursor(1, 1);
 
 	if ( frequency >= 10000000 ) {
 		buff[6] = buff[5];
@@ -125,40 +138,13 @@ void printRfFrequency(uint32_t frequency) {
 
 	buff[7] = 0;
 
-	/*buff[7] = ' ';
-	buff[8] = 'k';
-	buff[9] = 'H';
-	buff[10] = 'z';
-	buff[11] = ' ';
-	buff[12] = 0;*/
-
-	/*itoa(frequency, buff, 10);
-	ssd1306_SetCursor(1, 0);*/
-
 	ssd1306_WriteString(buff, Font_16x26, White);
-	ssd1306_UpdateScreen();
+	//ssd1306_UpdateScreen();
+	flagUpdateScreen = 1;
 }
 
 void showTuningStep(void) {
-	ssd1306_SetCursor(75, 45);
-	/*itoa(stepBuf[stepBufIdx] >= 1000 ? stepBuf[stepBufIdx]/1000 : stepBuf[stepBufIdx], buff, 10);
-	ssd1306_WriteString("Step:        ", Font_11x18, White);
-	ssd1306_SetCursor(5+(6*10), 0);
-	if (stepBuf[stepBufIdx] == 1000 ) { // '1k'
-		buff[1] = 'k';
-		buff[2] = 0;
-	}
-	if (stepBuf[stepBufIdx] == 10000 ) { // '10k'
-		buff[2] = 'k';
-		buff[3] = 0;
-	}
-	if (stepBuf[stepBufIdx] == 100000 ) { // '100k'
-		buff[3] = 'k';
-		buff[4] = 0;
-	}
-
-	ssd1306_WriteString(buff, Font_11x18, White);*/
-
+	ssd1306_SetCursor(75, Font_16x26.FontHeight + Font_11x18.FontHeight);
 	if ( stepBuf[stepBufIdx] == 100 ) {
 		ssd1306_WriteString("100 ", Font_11x18, White);
 	}
@@ -174,20 +160,17 @@ void showTuningStep(void) {
 	else if ( stepBuf[stepBufIdx] == 100000 ) {
 		ssd1306_WriteString("100k", Font_11x18, White);
 	}
-	ssd1306_UpdateScreen();
+	//ssd1306_UpdateScreen();
+	flagUpdateScreen = 1;
 }
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define NUMBER_TICK_KEY_WAIT	20000
-
-unsigned int countDelayKey = 0;
-uint8_t keyPressed = 0;
 
 bool isEncoderKeyPressed() {
-
-		if ( !keyPressed ) {
+	static uint8_t keyPressed = 0;
+		/*if ( !keyPressed ) {
 			if ( (Enkoder_Key_GPIO_Port->IDR & Enkoder_Key_Pin) == 0 ) {
 				keyPressed = 1;
 			}
@@ -207,9 +190,76 @@ bool isEncoderKeyPressed() {
 				keyPressed = 0;
 				countDelayKey = 0;
 			}
+		}*/
+
+	if ( !keyPressed && ((Enkoder_Key_GPIO_Port->IDR & Enkoder_Key_Pin) == 0) ) {
+		keyPressed = 1;
+		setBtnWaitTime(BUTTON_WAITING_TIME);
+	}
+	else if ( getBtnElapsedTime() == 0 ) {
+		if ( (Enkoder_Key_GPIO_Port->IDR & Enkoder_Key_Pin) == 0 ) {
+			keyPressed = 0;
+			return true;
 		}
-		return false;
+	}
+
+	return false;
 }
+
+void updateVoltage(void) {
+	if(convCompleted) {
+		convCompleted = 0;
+		//HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+		float adcValue = 3300 * HAL_ADC_GetValue(&hadc1)/4095;
+		adcValue = adcValue * (10000.0 + 4700.0)/4700.0;
+		//itoa(adcValue, buff, 10);
+
+		snprintf(buff, 19, "%.2fV", adcValue/1000);
+		ssd1306_SetCursor(1, Font_16x26.FontHeight + Font_11x18.FontHeight);
+		ssd1306_WriteString("     ", Font_11x18, White);
+		ssd1306_SetCursor(1, Font_16x26.FontHeight + Font_11x18.FontHeight);
+		ssd1306_WriteString(buff, Font_11x18, White);
+		//ssd1306_UpdateScreen();
+		flagUpdateScreen = 1;
+	}
+}
+
+void changeTuningStep(ENCODER_DIRECTION_TYPE dir) {
+	if (dir == DIRECTION_UP) {
+		if ( stepBufIdx < STEP_BUF_SIZE - 1 ) {
+			stepBufIdx++;
+		}
+	}
+	else if (dir == DIRECTION_DOWN) {
+		if ( stepBufIdx > 0 ) {
+			stepBufIdx--;
+		}
+	}
+	showTuningStep();
+}
+
+void setVFOFreqWithStepByDir(ENCODER_DIRECTION_TYPE dir) {
+	if ( dir == DIRECTION_UP ) {
+		pll_frequency = pll_frequency + stepBuf[stepBufIdx];
+		Si5351_set_freq(((pll_frequency + INTERMEDIATE_FREQUENCY)* SI5351_FREQ_MULT), SI5351_PLL_FIXED, SI5351_CLK0);
+		printRfFrequency(pll_frequency);
+	}
+	else if ( dir == DIRECTION_DOWN ) {
+		if (pll_frequency > 0 && (pll_frequency - stepBuf[stepBufIdx]) >= 100000) {
+			pll_frequency = pll_frequency - stepBuf[stepBufIdx];
+			Si5351_set_freq(((pll_frequency + INTERMEDIATE_FREQUENCY)* SI5351_FREQ_MULT), SI5351_PLL_FIXED, SI5351_CLK0);
+			printRfFrequency(pll_frequency);
+		}
+	}
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+	 if(hadc->Instance == ADC1) {
+		 convCompleted = 1;
+	 }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -219,8 +269,8 @@ bool isEncoderKeyPressed() {
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	  ENCODER_DIRECTION_TYPE encoderDir;
-	  uint32_t pll_frequency = START_FREQUENCY;	//17700000;
+	ENCODER_DIRECTION_TYPE encoderDir = DIRECTION_NONE;
+	ButtonKeyId_t keyPressed = buttonKEY_ID_NONE;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -243,66 +293,67 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   MX_TIM2_Init();
+  MX_ADC1_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+  keyboardInit();
   ssd1306_Init();
-    /*ssd1306_SetCursor(5, 0);
-    ssd1306_WriteString("Step: 100", Font_11x18, White);
-    ssd1306_UpdateScreen();*/
+  printRfFrequency(pll_frequency);
   showTuningStep();
+  ssd1306_UpdateScreen();
 
-    //uint32_t xt_freq = SI5351_XTAL_FREQ;
-    //Si5351RegSet pll_reg;
+  	Si5351_set_correction(-1370);
     Si5351_init(SI5351_CRYSTAL_LOAD_8PF, SI5351_XTAL_FREQ);
     Si5351_set_pll(SI5351_PLL_FIXED, SI5351_PLLA);
-    Si5351_set_freq(((pll_frequency + INTERMEDIATE_FREQUENCY)* SI5351_FREQ_MULT), SI5351_PLL_FIXED, SI5351_CLK0);
-    Si5351_drive_strength(SI5351_CLK0, SI5351_DRIVE_2MA);
+    //Si5351_set_pll(SI5351_PLL_FIXED, SI5351_PLLB);
 
-  //  Si5351_set_pll(SI5351_PLL_FIXED, SI5351_PLLB);
-  //  Si5351_set_freq(((pll_frequency)* SI5351_FREQ_MULT), SI5351_PLL_FIXED, SI5351_CLK1);
-  //  Si5351_drive_strength(SI5351_CLK1, SI5351_DRIVE_2MA);
+    Si5351_set_ms_source(SI5351_CLK0, SI5351_PLLA);
+    //Si5351_set_ms_source(SI5351_CLK1, SI5351_PLLA);
+    //Si5351_set_ms_source(SI5351_CLK2, SI5351_PLLB);
+
+    Si5351_set_freq(((pll_frequency + INTERMEDIATE_FREQUENCY)* SI5351_FREQ_MULT), SI5351_PLL_FIXED, SI5351_CLK0);
+    //Si5351_set_freq(((pll2_frequency)* SI5351_FREQ_MULT), SI5351_PLL_FIXED, SI5351_CLK1);
+
+    Si5351_drive_strength(SI5351_CLK0, SI5351_DRIVE_2MA);
+    //Si5351_drive_strength(SI5351_CLK1, SI5351_DRIVE_2MA);
 
     Si5351_set_state_out(SI5351_CLK1, SI5351_OUT_DISABLE);
     Si5351_set_state_out(SI5351_CLK2, SI5351_OUT_DISABLE);
 
-    printRfFrequency(pll_frequency);
-
     HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+
+    HAL_TIM_Base_Start(&htim3);
+    HAL_ADC_Start_IT(&hadc1);
+
+    //HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_3);
+    //HAL_ADC_Start_DMA(&hadc1, (uint32_t*)rawValues, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  keyPressed = KeyboardPoll();
 	  encoderDir = getEncoderDir();
-	  		if ( encoderDir == DIRECTION_UP ) {
-	  			pll_frequency = pll_frequency + stepBuf[stepBufIdx];
-	  			//si5351aSetFrequency(pll_frequency);
-	  			Si5351_set_freq(((pll_frequency + INTERMEDIATE_FREQUENCY)* SI5351_FREQ_MULT), SI5351_PLL_FIXED, SI5351_CLK0);
-	  			printRfFrequency(pll_frequency);
-	  		}
-	  		else if ( encoderDir == DIRECTION_DOWN ) {
-	  			if (pll_frequency > 0 && (pll_frequency - stepBuf[stepBufIdx]) >= 100000) {
-					pll_frequency = pll_frequency - stepBuf[stepBufIdx];
-					//si5351aSetFrequency(pll_frequency);
-					Si5351_set_freq(((pll_frequency + INTERMEDIATE_FREQUENCY)* SI5351_FREQ_MULT), SI5351_PLL_FIXED, SI5351_CLK0);
-					printRfFrequency(pll_frequency);
-	  			}
-	  		}
-    /* USER CODE END WHILE */
+	  setVFOFreqWithStepByDir(encoderDir);
 
-    /* USER CODE BEGIN 3 */
-	  		if ( isEncoderKeyPressed() ) {
-	  			//HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-	  			if ( stepBufIdx < STEP_BUF_SIZE ) {
-	  				stepBufIdx++;
-	  				if ( stepBufIdx == STEP_BUF_SIZE )
-	  				{
-	  					stepBufIdx = 0;
-	  				}
-	  			}
-	  			showTuningStep();
-	  		}
+	  if ( keyPressed == buttonKEY_ID_LEFT /*encoderKEY_ID*/ ) {
+		  if ( stepBufIdx < STEP_BUF_SIZE ) {
+			  stepBufIdx++;
+			  if ( stepBufIdx == STEP_BUF_SIZE )
+			  {
+				  stepBufIdx = 0;
+			  }
+		  }
+		  showTuningStep();
+	  }
+
+	  updateVoltage();
+	  if(flagUpdateScreen) {
+		  flagUpdateScreen = 0;
+		  ssd1306_UpdateScreen();
+	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -318,6 +369,7 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -346,6 +398,57 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV4;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+  /** Common config
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T3_TRGO;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_2;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_13CYCLES_5;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
 }
 
 /**
@@ -409,12 +512,12 @@ static void MX_TIM2_Init(void)
   sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
   sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
   sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
-  sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
-  sConfig.IC1Filter = 10;
+  sConfig.IC1Prescaler = TIM_ICPSC_DIV4;
+  sConfig.IC1Filter = 15;
   sConfig.IC2Polarity = TIM_ICPOLARITY_RISING;
   sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
-  sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
-  sConfig.IC2Filter = 10;
+  sConfig.IC2Prescaler = TIM_ICPSC_DIV4;
+  sConfig.IC2Filter = 15;
   if (HAL_TIM_Encoder_Init(&htim2, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -428,6 +531,51 @@ static void MX_TIM2_Init(void)
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 5999;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 3999;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
 
 }
 
@@ -450,6 +598,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(Enkoder_Key_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : Button_Left_Pin Button_Ok_Pin */
+  GPIO_InitStruct.Pin = Button_Left_Pin|Button_Ok_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 }
 

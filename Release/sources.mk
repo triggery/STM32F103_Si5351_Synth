@@ -22,6 +22,7 @@ OBJCOPY_BIN :=
 SUBDIRS := \
 Core/Src \
 Core/Startup \
+Drivers/Keyboard \
 Drivers/SSD1306 \
 Drivers/STM32F1xx_HAL_Driver/Src \
 Drivers/Si5351 \

@@ -66,12 +66,12 @@ uint8_t lock_plla, lock_pllb;
 uint32_t xtal_freq;
 
 uint64_t Si5351_pllCalc(uint64_t freq, Si5351RegSet *reg, int32_t correction);
-uint8_t si5351_write_bulk(uint8_t addr, uint8_t bytes, uint8_t *data);
+HAL_StatusTypeDef si5351_write_bulk(uint8_t addr, uint8_t bytes, uint8_t *data);
 
 uint8_t select_r_div(uint64_t *freq);
 uint64_t multisynth_calc(uint64_t freq, uint64_t pll_freq, Si5351RegSet *reg);
 void set_ms(enum si5351_clock clk, Si5351RegSet ms_reg, uint8_t int_mode, uint8_t r_div, uint8_t div_by_4);
-void set_ms_source(enum si5351_clock clk, enum si5351_pll pll);
+//void set_ms_source(enum si5351_clock clk, enum si5351_pll pll);
 void set_int(enum si5351_clock clk, uint8_t enable);
 void ms_div(enum si5351_clock clk, uint8_t r_div, uint8_t div_by_4);
 void pll_reset(enum si5351_pll target_pll);
@@ -231,8 +231,8 @@ uint64_t Si5351_pllCalc(uint64_t freq, Si5351RegSet *reg, int32_t correction)
 uint8_t Si5351_set_freq(uint64_t freq, uint64_t pll_freq, enum si5351_clock clk)
 {
 	Si5351RegSet ms_reg;	//, pll_reg;
-	enum si5351_pll target_pll;
-	uint8_t write_pll = 0;
+	//enum si5351_pll target_pll;
+	//uint8_t write_pll = 0;
 	//uint8_t reg_val;
 	uint8_t r_div = SI5351_OUTPUT_CLK_DIV_1;
 	uint8_t int_mode = 0;
@@ -267,11 +267,11 @@ uint8_t Si5351_set_freq(uint64_t freq, uint64_t pll_freq, enum si5351_clock clk)
 	if((pll_freq) && (freq < SI5351_MULTISYNTH_DIVBY4_FREQ * SI5351_FREQ_MULT))
 	{
 		multisynth_calc(freq, pll_freq, &ms_reg);
-		write_pll = 0;
+		//write_pll = 0;
 		div_by_4 = 0;
 		int_mode = 0;
 
-		switch(clk)
+		/*switch(clk)
 		{
 		case SI5351_CLK0:
 			clk0_freq = freq;
@@ -284,10 +284,13 @@ uint8_t Si5351_set_freq(uint64_t freq, uint64_t pll_freq, enum si5351_clock clk)
 			break;
 		default:
 			break;
-		}
+		}*/
 	}
 	else
 	{
+		clk1_freq = 0;
+		return 1;
+		/*
 		// The PLL must be calculated and set by firmware when 150 MHz <= freq <= 160 MHz
 		if(freq >= SI5351_MULTISYNTH_DIVBY4_FREQ * SI5351_FREQ_MULT)
 		{
@@ -307,7 +310,7 @@ uint8_t Si5351_set_freq(uint64_t freq, uint64_t pll_freq, enum si5351_clock clk)
 			pll_freq = multisynth_calc(freq, 0, &ms_reg);
 			target_pll = SI5351_PLLA;
 			write_pll = 1;
-			set_ms_source(SI5351_CLK0, SI5351_PLLA);
+			Si5351_set_ms_source(SI5351_CLK0, SI5351_PLLA);
 
 			plla_freq = pll_freq;
 			clk0_freq = freq;
@@ -329,7 +332,7 @@ uint8_t Si5351_set_freq(uint64_t freq, uint64_t pll_freq, enum si5351_clock clk)
 					pll_freq = pllb_freq;
 					multisynth_calc(freq, pll_freq, &ms_reg);
 					write_pll = 0;
-					set_ms_source(SI5351_CLK1, SI5351_PLLB);
+					Si5351_set_ms_source(SI5351_CLK1, SI5351_PLLB);
 				}
 			}
 			else
@@ -337,7 +340,7 @@ uint8_t Si5351_set_freq(uint64_t freq, uint64_t pll_freq, enum si5351_clock clk)
 				pllb_freq = pll_freq;
 				pll_freq = multisynth_calc(freq, 0, &ms_reg);
 				write_pll = 1;
-				set_ms_source(SI5351_CLK1, SI5351_PLLB);
+				Si5351_set_ms_source(SI5351_CLK1, SI5351_PLLB);
 			}
 
 			if(freq >= SI5351_MULTISYNTH_SHARE_MAX * SI5351_FREQ_MULT || freq < SI5351_CLKOUT_MIN_FREQ * SI5351_FREQ_MULT * 128)
@@ -378,7 +381,7 @@ uint8_t Si5351_set_freq(uint64_t freq, uint64_t pll_freq, enum si5351_clock clk)
 					pll_freq = pllb_freq;
 					multisynth_calc(freq, pll_freq, &ms_reg);
 					write_pll = 0;
-					set_ms_source(SI5351_CLK2, SI5351_PLLB);
+					Si5351_set_ms_source(SI5351_CLK2, SI5351_PLLB);
 				}
 			}
 			// need to account for CLK2 set before CLK1
@@ -387,7 +390,7 @@ uint8_t Si5351_set_freq(uint64_t freq, uint64_t pll_freq, enum si5351_clock clk)
 				pllb_freq = pll_freq;
 				pll_freq = multisynth_calc(freq, 0, &ms_reg);
 				write_pll = 1;
-				set_ms_source(SI5351_CLK2, SI5351_PLLB);
+				Si5351_set_ms_source(SI5351_CLK2, SI5351_PLLB);
 			}
 
 			if(freq >= SI5351_MULTISYNTH_SHARE_MAX * SI5351_FREQ_MULT || freq < SI5351_CLKOUT_MIN_FREQ * SI5351_FREQ_MULT * 128)
@@ -413,17 +416,17 @@ uint8_t Si5351_set_freq(uint64_t freq, uint64_t pll_freq, enum si5351_clock clk)
 			break;
 		default:
 			return 1;
-		}
+		} */
 	}
 
 	// Set multisynth registers (MS must be set before PLL)
 	set_ms(clk, ms_reg, int_mode, r_div, div_by_4);
 
 	// Set PLL if necessary
-	if(write_pll == 1)
+	/*if(write_pll == 1)
 	{
 		Si5351_set_pll(pll_freq, target_pll);
-	}
+	}*/
 
 	return 0;
 }
@@ -824,7 +827,7 @@ void ms_div(enum si5351_clock clk, uint8_t r_div, uint8_t div_by_4)
  *
  * Set the desired PLL source for a multisynth.
  */
-void set_ms_source(enum si5351_clock clk, enum si5351_pll pll)
+void Si5351_set_ms_source(enum si5351_clock clk, enum si5351_pll pll)
 {
 	uint8_t reg_val;
 
@@ -845,7 +848,7 @@ void set_ms_source(enum si5351_clock clk, enum si5351_pll pll)
 }
 
 
-uint8_t si5351_write_bulk(uint8_t addr, uint8_t bytes, uint8_t *data)
+HAL_StatusTypeDef si5351_write_bulk(uint8_t addr, uint8_t bytes, uint8_t *data)
 {
 	HAL_StatusTypeDef status = HAL_OK;
 
@@ -858,7 +861,7 @@ uint8_t si5351_write_bulk(uint8_t addr, uint8_t bytes, uint8_t *data)
 							  data,								// write returned data to this variable
 							  bytes,							// how many bytes to expect returned
 							  100);								// timeout
-    return 0;
+    return status;
 }
 
 /*
@@ -963,11 +966,11 @@ void Si5351_set_state_out(enum si5351_clock clock_out, enum si5351_out_state out
 /**************************************************************************/
 err_t si5351_write8 (uint8_t reg, uint8_t value)
 {
-	HAL_StatusTypeDef status = HAL_OK;
+	//HAL_StatusTypeDef status = HAL_OK;
   
 	while (HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(SI5351_ADDRESS<<1), 3, 100) != HAL_OK) { }
-
-    status = HAL_I2C_Mem_Write(&hi2c1,							// i2c handle
+	//status =
+    HAL_I2C_Mem_Write(&hi2c1,							// i2c handle
     						  (uint8_t)(SI5351_ADDRESS<<1),		// i2c address, left aligned
 							  (uint8_t)reg,						// register address
 							  I2C_MEMADD_SIZE_8BIT,				// si5351 uses 8bit register addresses
@@ -985,11 +988,11 @@ err_t si5351_write8 (uint8_t reg, uint8_t value)
 /**************************************************************************/
 err_t si5351_read8(uint8_t reg, uint8_t *value)
 {
-	HAL_StatusTypeDef status = HAL_OK;
+	//HAL_StatusTypeDef status = HAL_OK;
 
 	while (HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(SI5351_ADDRESS<<1), 3, 100) != HAL_OK) { }
-
-    status = HAL_I2C_Mem_Read(&hi2c1,							// i2c handle
+	//status =
+    HAL_I2C_Mem_Read(&hi2c1,							// i2c handle
     						  (uint8_t)(SI5351_ADDRESS<<1),		// i2c address, left aligned
 							  (uint8_t)reg,						// register address
 							  I2C_MEMADD_SIZE_8BIT,				// si5351 uses 8bit register addresses

@@ -12,6 +12,7 @@ RM := rm -rf
 -include Drivers/Si5351/subdir.mk
 -include Drivers/STM32F1xx_HAL_Driver/Src/subdir.mk
 -include Drivers/SSD1306/subdir.mk
+-include Drivers/Keyboard/subdir.mk
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk
 -include subdir.mk
@@ -64,7 +65,7 @@ main-build: STM32F103_Si5351_Synth.elf secondary-outputs
 
 # Tool invocations
 STM32F103_Si5351_Synth.elf: $(OBJS) $(USER_OBJS) /home/dmitry/Projects/STM32CubeIDE/STM32F103_Si5351_Synth/STM32F103C8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "STM32F103_Si5351_Synth.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"/home/dmitry/Projects/STM32CubeIDE/STM32F103_Si5351_Synth/STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="STM32F103_Si5351_Synth.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+	arm-none-eabi-gcc -o "STM32F103_Si5351_Synth.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"/home/dmitry/Projects/STM32CubeIDE/STM32F103_Si5351_Synth/STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="STM32F103_Si5351_Synth.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -u _printf_float -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

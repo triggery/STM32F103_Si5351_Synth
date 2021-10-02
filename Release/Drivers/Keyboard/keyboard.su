@@ -1,0 +1,2 @@
+keyboard.c:15:6:keyboardInit	8	static
+keyboard.c:44:15:KeyboardPoll	24	static

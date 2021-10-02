@@ -56,8 +56,10 @@ void SVC_Handler(void);
 void DebugMon_Handler(void);
 void PendSV_Handler(void);
 void SysTick_Handler(void);
+void ADC1_2_IRQHandler(void);
 /* USER CODE BEGIN EFP */
-
+uint32_t getBtnElapsedTime(void);
+void setBtnWaitTime(uint32_t timeMs);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus
